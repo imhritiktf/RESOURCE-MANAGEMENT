@@ -11,6 +11,7 @@ const CreateResourceModal = ({ onClose }) => {
     description: "",
     organization: "", // Organization will be auto-filled
     supervisors: [], // Array of supervisor IDs
+    section: "", // New field for section
   });
 
   // Fetch supervisors for the dropdown
@@ -29,17 +30,18 @@ const CreateResourceModal = ({ onClose }) => {
   const addResourceMutation = useMutation({
     mutationFn: async (newResource) => {
       const token = localStorage.getItem("token");
-     const {data} = await axios.post("http://localhost:5000/api/resources", newResource, {
+      const { data } = await axios.post("http://localhost:5000/api/resources", newResource, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      return data; // Return the response data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["resources"] }); // Refresh the list
-      toast.success(data.message || "Resource created successfully");
+      toast.success(data.message || "Resource created successfully"); // Use backend message
       onClose(); // Close the modal
     },
-    onError: () => {
-      toast.error("Failed to add resource");
+    onError: (error) => {
+      toast.error(error.response?.data?.message || "Failed to add resource"); // Use backend error message
     },
   });
 
@@ -49,6 +51,12 @@ const CreateResourceModal = ({ onClose }) => {
     // Validate the number of supervisors before submitting
     if (formData.supervisors.length < 1 || formData.supervisors.length > 2) {
       toast.error("Please select 1 or 2 supervisors.");
+      return;
+    }
+
+    // Validate the section field
+    if (!formData.section) {
+      toast.error("Please select a section.");
       return;
     }
 
@@ -135,6 +143,24 @@ const CreateResourceModal = ({ onClose }) => {
               className="w-full p-2 border rounded-md bg-gray-100"
               readOnly // Make the field read-only
             />
+          </div>
+
+          {/* Section */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700">Section</label>
+            <select
+              name="section"
+              value={formData.section}
+              onChange={handleChange}
+              className="w-full p-2 border rounded-md"
+              required
+            >
+              <option value="">Select a section</option>
+              <option value="Infrastructure">Infrastructure</option>
+              <option value="Plant and Machinery">Plant and Machinery</option>
+              <option value="Cleaning">Cleaning</option>
+              {/* Add more sections as needed */}
+            </select>
           </div>
 
           {/* Supervisors Dropdown */}

@@ -1,6 +1,9 @@
 const Request = require("../models/Request");
 const Resource = require("../models/Resource");
 const RequestLog = require("../models/RequestLog");
+const ResourceUsageLog = require("../models/ResourceUsageLog");
+const ApprovalLog = require("../models/ApprovalLog");
+
 
 // Create a new resource request
 exports.createRequest = async (req, res) => {
@@ -117,8 +120,6 @@ exports.getRequests = async (req, res) => {
   }
 };
 
-
-
 exports.getFacultyRequests = async (req, res) => {
   try {
     const { status, priority, organization, startDate, endDate, lastMonth, sortBy, limit = 10, page = 1 } = req.query;
@@ -190,103 +191,31 @@ exports.getFacultyRequests = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+// get request logd
+exports.getRequestLog = async (req, res) => {
+  try{
+    let filter = {};
 
-exports.updateRequestStatus = async (req, res) => {
-  try {
-    console.log("🔹 Request received to update status:", req.params.id);
-    console.log("🔹 Request Body:", req.body);
-    console.log("🔹 User Role:", req.user.role);
-
-    const { status, rejectionReason } = req.body;
-    
-    // ✅ Populate faculty to get their organization
-    const request = await Request.findById(req.params.id).populate("faculty", "organization");
-
-    if (!request) {
-      console.log("❌ Request not found");
-      return res.status(404).json({ message: "Request not found" });
+    if (req.user.role === "faculty") {
+      // Faculty can only see logs of their own requests
+      filter["request.faculty"] = req.user._id;
+    } else if (req.user.role === "supervisor") {
+      // Supervisors can only see logs of requests related to their assigned resources
+      filter["request.resource"] = { $in: req.user.assignedResources };
     }
+    // Trustees can see all logs, so no need to modify filter
 
-    // ✅ Ensure organization is correctly assigned
-    if (!request.organization) {
-      console.log("⚠️ Organization field is missing! Assigning from faculty.");
-      request.organization = request.faculty.organization;  // ✅ Use faculty's organization
-    }
+    const logs = await ApprovalLog.find(filter)  
+    .populate("request", "eventDetails requestedDate")
+    .populate("actionBy", "name email role")
+    .sort({ timestamp: -1 });
 
-    // 🛑 Supervisor Access Control
-    if (req.user.role === "supervisor") {
-      const assignedResourceIds = (req.user.assignedResources || []).map(r => r.toString());
-      if (!assignedResourceIds.includes(request.resource.toString())) {
-        console.log("❌ Access Denied! Supervisor not assigned to this resource.");
-        return res.status(403).json({ message: "Access denied! You can only approve/reject assigned resources." });
-      }
-    }
+    res.json(logs);
 
-    // ❌ Ensure Rejection Reason is Provided
-    if (status === "rejected" && !rejectionReason) {
-      console.log("❌ Rejection reason required but missing.");
-      return res.status(400).json({ message: "Rejection reason is required." });
-    }
-
-    // 🚨 Suspicious Activity Detection
-    const now = new Date();
-    const timeSinceRequest = (now - request.createdAt) / 1000; // Convert to seconds
-    let suspiciousActivity = request.suspiciousActivity || [];
-
-    if (timeSinceRequest < 10) {
-      console.log("⚠️ Suspicious Activity: Approval too fast.");
-      suspiciousActivity.push({ type: "tooFast", detectedAt: now });
-    }
-
-    if (request.requestedDate < now) {
-      console.log("⚠️ Suspicious Activity: Approval too late.");
-      suspiciousActivity.push({ type: "tooLate", detectedAt: now });
-    }
-
-    // ✅ Update Request
-    request.status = status;
-    request.approvedBy = req.user._id;
-    request.approvalTime = now;
-    request.suspiciousActivity = suspiciousActivity;
-    request.lastUpdatedBy = req.user._id;
-
-    if (status === "rejected") {
-      request.rejectionReason = rejectionReason;
-    } else {
-      request.rejectionReason = undefined;
-    }
-
-    console.log("✅ Saving updated request...");
-    await request.save();
-
-    // 📜 Log Approval/Rejection
-    console.log("📜 Creating approval log entry...");
-    const logEntry = new RequestLog({
-      request: request._id,
-      action: status === "approved" ? "approved" : "rejected",
-      performedBy: req.user._id,
-      timestamp: now,
-      details: status === "rejected" ? `Rejection Reason: ${rejectionReason}` : "Request Approved",
-    });
-
-    await logEntry.save();
-
-    console.log("✅ Request updated successfully!");
-    res.json({
-      message: `Request ${status} successfully`,
-      request,
-      suspiciousActivity,
-    });
-  } catch (error) {
-    console.error("❌ Server Error:", error.message);
-    res.status(500).json({ message: "Server error", error: error.message });
+  }catch(error){
+    res.status(500).json({ message: "Server error", errror:error.message });
   }
-};
-
-
-
-
-
+}
 // Delete a Request (Only before approval)
 exports.deleteRequest = async (req, res) => {
   try {
@@ -307,31 +236,6 @@ exports.deleteRequest = async (req, res) => {
   }
 };
 
-// get request logd
-exports.getRequestLog = async (req, res) => {
-  try{
-    let filter = {};
-
-    if (req.user.role === "faculty") {
-      // Faculty can only see logs of their own requests
-      filter["request.faculty"] = req.user._id;
-    } else if (req.user.role === "supervisor") {
-      // Supervisors can only see logs of requests related to their assigned resources
-      filter["request.resource"] = { $in: req.user.assignedResources };
-    }
-    // Trustees can see all logs, so no need to modify filter
-
-    const logs = await RequestLog.find(filter)  
-    .populate("request", "eventDetails requestedDate status")
-    .populate("performedBy", "name email role")
-    .sort({ timestamp: -1 });
-
-    res.json(logs);
-
-  }catch(error){
-    res.status(500).json({ message: "Server error", errror:error.message });
-  }
-}
 exports.getRequestLogByRequestId = async (req, res) => {
   try {
     const { requestId } = req.params;
@@ -355,17 +259,113 @@ exports.getRequestLogByRequestId = async (req, res) => {
   }
 };
 
-exports.getExpiredRequests = async (req, res) => {
-  try {
-    const logs = await RequestLog.find({ action: "rejected", performedBy: null }) // Filter auto-expired logs
-      .populate("request", "eventDetails requestedDate durationDays priority")
-      .sort({ timestamp: -1 });
+  exports.updateRequestStatus = async (req, res) => {
+    try {
+      const { status, rejectionReason } = req.body;
+      const request = await Request.findById(req.params.id).populate("faculty", "organization");
 
-    res.json(logs);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
+      if (!request) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+
+      // Ensure slaBreached is an object
+      if (!request.slaBreached || typeof request.slaBreached !== "object") {
+        request.slaBreached = { isBreached: false, resolved: false };
+      }
+
+      // Ensure organization is correctly assigned
+      if (!request.organization) {
+        request.organization = request.faculty.organization;
+      }
+
+      // Supervisor Access Control
+      if (req.user.role === "supervisor") {
+        const assignedResourceIds = (req.user.assignedResources || []).map(r => r.toString());
+        if (!assignedResourceIds.includes(request.resource.toString())) {
+          return res.status(403).json({ message: "Access denied! You can only approve/reject assigned resources." });
+        }
+      }
+
+      // Ensure Rejection Reason is Provided
+      if (status === "rejected" && !rejectionReason) {
+        return res.status(400).json({ message: "Rejection reason is required." });
+      }
+
+      // 🚨 Suspicious Activity Detection
+      const now = new Date();
+      const timeSinceRequest = (now - request.createdAt) / 1000; // Convert to seconds
+      let suspiciousActivity = request.suspiciousActivity || [];
+
+      if (timeSinceRequest < 10) {
+        suspiciousActivity.push({ type: "tooFast", detectedAt: now, details: "Approved within 10 seconds" });
+      }
+
+      if (request.requestedDate < now) {
+        suspiciousActivity.push({ type: "tooLate", detectedAt: now, details: "Approved after event date" });
+      }
+
+      // ✅ Update Request
+      request.status = status;
+      request.approvedBy = req.user._id;
+      request.approvalTime = now;
+      request.suspiciousActivity = suspiciousActivity;
+      request.lastUpdatedBy = req.user._id;
+
+      if (status === "rejected") {
+        request.rejectionReason = rejectionReason;
+      } else {
+        request.rejectionReason = undefined;
+      }
+
+      // Resolve SLA breach if the request is approved or rejected
+      if (request.slaBreached.isBreached && !request.slaBreached.resolved) {
+        request.slaBreached.resolved = true;
+        request.slaBreached.resolvedAt = now;
+        request.slaBreached.resolvedBy = req.user._id;
+      }
+
+    
+
+      await request.save();
+
+      // Log Approval/Rejection
+      const logEntry = new ApprovalLog({
+        request: request._id,
+        actionBy: req.user._id,
+        action: status,
+        reason: status === "rejected" ? rejectionReason : undefined,
+      });
+
+      await logEntry.save();
+
+      // Log Resource Usage (if approved)
+      if (status === "approved") {
+        const bookingStart = request.requestedDate;
+        const bookingEnd = new Date(bookingStart.getTime() + request.durationDays * 24 * 60 * 60 * 1000); // Convert durationDays to milliseconds
+        const durationDays = request.durationDays;
+
+        const usageLog = new ResourceUsageLog({
+          resource: request.resource,
+          faculty: request.faculty,
+          organization: request.organization,
+          bookingStart,
+          bookingEnd,
+          durationDays,
+        });
+
+        await usageLog.save();
+      }
+
+      res.json({
+        message: `Request ${status} successfully`,
+        request,
+        suspiciousActivity,
+      });
+    } catch (error) {
+      console.error("Error in updateRequestStatus:", error); // Log the full error
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  };
 
 exports.getSlaBreachedRequests = async (req, res) => {
   try {
@@ -374,20 +374,67 @@ exports.getSlaBreachedRequests = async (req, res) => {
       return res.status(403).json({ message: "Access denied! Only trustees can view SLA-breached requests." });
     }
 
-    const breachedRequests = await Request.find({ slaBreached: true })
-      .populate("faculty", "name email department")
-      .populate({
-        path: "resource",
-        select: "name organization supervisors",
-        populate: { path: "supervisors", select: "name email role" } // Get supervisor details
-      });
+    const { organization, startDate, endDate } = req.query;
 
-    res.json(breachedRequests);
+    // Match stage for filtering
+    const match = { "slaBreached.isBreached": true };
+    if (organization) match.organization = organization;
+
+    // Add date range filter if startDate and endDate are provided
+    if (startDate && endDate) {
+      match["slaBreached.breachedAt"] = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    } else if (startDate) {
+      match["slaBreached.breachedAt"] = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      match["slaBreached.breachedAt"] = { $lte: new Date(endDate) };
+    }
+
+    // Fetch all SLA breaches (both pending and resolved)
+    const logs = await Request.find(match)
+      .populate("faculty", "name email department")
+      .populate("resource", "name organization")
+      .select("_id faculty resource slaBreached");
+
+    // Format logs and handle null values
+    const formattedLogs = logs.map((log) => ({
+      requestId: log._id,
+      facultyName: log.faculty ? log.faculty.name : "Unknown Faculty",
+      resourceName: log.resource ? log.resource.name : "Unknown Resource",
+      breachedAt: log.slaBreached.breachedAt,
+      resolvedAt: log.slaBreached.resolvedAt,
+      reason: log.slaBreached.reason,
+      resolved: log.slaBreached.resolved,
+    }));
+
+    // Separate pending and resolved breaches
+    const pendingBreaches = formattedLogs.filter((log) => !log.resolved);
+    const resolvedBreaches = formattedLogs.filter((log) => log.resolved);
+
+    // Fetch SLA breach trends
+    const trends = await Request.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$slaBreached.breachedAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          date: "$_id",
+          count: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    res.json({ pendingBreaches, resolvedBreaches, trends });
   } catch (error) {
+    console.error("Error in getSlaBreachedRequests:", error); // Log the error
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 exports.getSuspiciousRequests = async (req, res) => {
   try {
     if (req.user.role !== "trustee") {
@@ -402,6 +449,87 @@ exports.getSuspiciousRequests = async (req, res) => {
 
     res.json(suspiciousRequests);
   } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+exports.getExpiredRequests = async (req, res) => {
+  try {
+    const logs = await RequestLog.find({ action: "rejected", performedBy: null }) // Filter auto-expired logs
+      .populate("request", "eventDetails requestedDate durationDays priority")
+      .sort({ timestamp: -1 });
+
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.resolveSLABreach = async (req, res) => {
+  try {
+    const { requestId } = req.params; // Ensure requestId is extracted correctly
+    const resolvedBy = req.user._id; // Assuming the user resolving the breach is authenticated
+
+    const request = await Request.findById(requestId);
+
+    if (!request) {
+      return res.status(404).json({ message: "Request not found"   });
+    }
+
+    if (!request.slaBreached.isBreached) {
+      return res.status(400).json({ message: "This request has no SLA breach to resolve" });
+    }
+
+    // Update the SLA breach status
+    request.slaBreached.resolved = true;
+    request.slaBreached.resolvedAt = new Date();
+    request.slaBreached.resolvedBy = resolvedBy;
+
+    await request.save();
+
+    res.json({ message: "SLA breach resolved successfully", request });
+  } catch (error) {
+    console.error("Error resolving SLA breach:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// metricsController.js
+
+
+// controllers/metricsController.js
+exports.getSLAMetrics = async (req, res) => {
+  try {
+    const { organization, startDate, endDate } = req.query;
+
+    // Match stage for filtering
+    const match = { "slaBreached.isBreached": true };
+    if (organization) match.organization = organization;
+
+    // Add date range filter if startDate and endDate are provided
+    if (startDate && endDate) {
+      match["slaBreached.breachedAt"] = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    } else if (startDate) {
+      match["slaBreached.breachedAt"] = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      match["slaBreached.breachedAt"] = { $lte: new Date(endDate) };
+    }
+
+    // Fetch total breaches
+    const totalBreaches = await Request.countDocuments(match);
+
+    // Fetch resolved breaches
+    const resolvedBreaches = await Request.countDocuments({ ...match, "slaBreached.resolved": true });
+
+    // Fetch pending breaches
+    const pendingBreaches = await Request.countDocuments({ ...match, "slaBreached.resolved": false });
+
+    res.json({
+      totalBreaches,
+      resolvedBreaches,
+      pendingBreaches,
+    });
+  } catch (error) {
+    console.error("Error fetching SLA metrics:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

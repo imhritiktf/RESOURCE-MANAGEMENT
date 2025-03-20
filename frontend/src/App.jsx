@@ -14,6 +14,10 @@ import UserManagement from "./pages/trustee/UserManagement";
 import RequestManagement from "./pages/trustee/RequestManagement";
 import ResourceManagement from "./pages/trustee/ResourceManagement";
 import LogsAnalytics from "./pages/trustee/LogsAnalytics";
+import ResourceUsageAnalytics from "./pages/trustee/ResourceUsageAnalytics";
+import SuspiciousActivityLogs from "./pages/trustee/SuspiciousActivityLogs";
+import RequestHistory from "./pages/trustee/RequestHistory";
+import SLABreach from "./pages/trustee/SLABreachedRequests";
 
 function ProtectedRoute({ children, role }) {
   const { user } = useAuth();
@@ -21,7 +25,7 @@ function ProtectedRoute({ children, role }) {
   if (!user) {
     return <Navigate to="/login" />;
   }
-  
+
   if (role && user.role !== role) {
     return <Navigate to={`/${user.role}-dashboard`} />;
   }
@@ -59,20 +63,27 @@ export default function App() {
 
         {/* Trustee Dashboard with Sidebar & Navbar */}
         <Route
-          path="/trustee-dashboard/*"
-          element={
-            <ProtectedRoute role="trustee">
-              <TrusteeDashboard />
-            </ProtectedRoute>
-          }
-        >
-          {/* Nested Routes inside TrusteeDashboard */}
-          <Route index element={<Navigate to="users" />} />
-          <Route path="users" element={<UserManagement />} />
-          <Route path="requests" element={<RequestManagement />} />
-          <Route path="resources" element={<ResourceManagement />} />
-          <Route path="logs" element={<LogsAnalytics />} />
-        </Route>
+  path="/trustee-dashboard/*"
+  element={
+    <ProtectedRoute role="trustee">
+      <TrusteeDashboard />
+    </ProtectedRoute>
+  }
+>
+  <Route index element={<Navigate to="users" />} />
+  <Route path="users" element={<UserManagement />} />
+  <Route path="requests" element={<RequestManagement />} />
+  <Route path="resources" element={<ResourceManagement />} />
+
+  {/* Logs & Analytics Nested Routes */}
+  <Route path="logs" element={<LogsAnalytics />}>
+    <Route index element={<Navigate to="resource-usage" />} />
+    <Route path="resource-usage" element={<ResourceUsageAnalytics />} />
+    <Route path="suspicious-activities" element={<SuspiciousActivityLogs />} />
+    <Route path="request-history" element={<RequestHistory />} />
+    <Route path="sla-breached" element={<SLABreach />} />
+  </Route>
+</Route>
 
         {/* Redirect Unknown Routes */}
         <Route path="*" element={<Navigate to="/login" />} />

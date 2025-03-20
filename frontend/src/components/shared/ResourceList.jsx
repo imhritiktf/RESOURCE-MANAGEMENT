@@ -15,6 +15,7 @@ const ResourceList = () => {
     description: "",
     organization: "",
     supervisors: [],
+    section: "", // New field for section
   });
 
   // Fetch resources using TanStack Query
@@ -26,6 +27,18 @@ const ResourceList = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       return data;
+    },
+  });
+
+   // Fetch sections using TanStack Query
+   const { data: sections = [] } = useQuery({
+    queryKey: ["sections"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const { data } = await axios.get("http://localhost:5000/api/resources/sections", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data.sections; // Return the sections array
     },
   });
 
@@ -137,6 +150,7 @@ const ResourceList = () => {
       description: resource.description,
       organization: resource.organization,
       supervisors: resource.supervisors.map((supervisor) => supervisor._id),
+      section: resource.section, // Include section in the form data
     });
   };
 
@@ -146,13 +160,15 @@ const ResourceList = () => {
     label: supervisor.name,
   }));
 
+  // Group resources by section
+
   if (isLoading) return <p className="text-center text-gray-600">Loading resources...</p>;
   if (isError) return <p className="text-center text-red-500">Error fetching resources</p>;
 
   return (
     <div className="p-6 bg-white shadow-md rounded-lg">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Resource List</h2>
-
+  
       {/* CSV Upload Button */}
       <button
         onClick={() => setShowCSVUploadModal(true)}
@@ -161,60 +177,64 @@ const ResourceList = () => {
         <FaUpload className="inline-block mr-2" />
         Upload Resources via CSV
       </button>
-
+  
       {/* Resources Table */}
       <div className="overflow-hidden rounded-lg shadow-sm">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-gradient-to-r from-[#ef7f1a] to-[#ffa64d] text-white">
-            <tr>
-              <th className="p-4">Name</th>
-              <th className="p-4">Description</th>
-              <th className="p-4">Organization</th>
-              <th className="p-4">Supervisors</th>
-              <th className="p-4 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {resources.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="text-center p-6 text-gray-500">
-                  No resources found
-                </td>
-              </tr>
-            ) : (
-              resources.map((resource) => (
-                <tr key={resource._id} className="border-b hover:bg-gray-50">
-                  <td className="p-4">{resource.name}</td>
-                  <td className="p-4">{resource.description}</td>
-                  <td className="p-4">{resource.organization}</td>
-                  <td className="p-4">
-                    {resource.supervisors.map((supervisor) => (
-                      <span key={supervisor._id} className="block">
-                        {supervisor.name}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="p-4 text-center space-x-2">
-                    <button
-                      onClick={() => openUpdateModal(resource)}
-                      className="text-blue-600 hover:text-blue-800 transition"
-                    >
-                      <FaEdit />
-                    </button>
-                    <button
-                      onClick={() => setResourceToDelete(resource)}
-                      className="text-red-600 hover:text-red-800 transition"
-                    >
-                      <FaTrash />
-                    </button>
-                  </td>
+        {sections.map((section) => (
+          <div key={section} className="mb-8">
+            <h3 className="text-xl font-bold mb-4 bg-gray-100 p-3 rounded-t-lg">
+              {section}
+            </h3>
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-gradient-to-r from-[#ef7f1a] to-[#ffa64d] text-white">
+                <tr>
+                  <th className="p-4">Name</th>
+                  <th className="p-4">Description</th>
+                  <th className="p-4">Organization</th>
+                  <th className="p-4">Supervisors</th>
+                  <th className="p-4 text-center">Actions</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {resources
+                  .filter((resource) => resource.section === section)
+                  .map((resource) => (
+                    <tr
+                      key={resource._id}
+                      className="border-b hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="p-4">{resource.name}</td>
+                      <td className="p-4">{resource.description}</td>
+                      <td className="p-4">{resource.organization}</td>
+                      <td className="p-4">
+                        {resource.supervisors.map((supervisor) => (
+                          <span key={supervisor._id} className="block">
+                            {supervisor.name}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="p-4 text-center space-x-2">
+                        <button
+                          onClick={() => openUpdateModal(resource)}
+                          className="text-blue-600 hover:text-blue-800 transition"
+                        >
+                          <FaEdit />
+                        </button>
+                        <button
+                          onClick={() => setResourceToDelete(resource)}
+                          className="text-red-600 hover:text-red-800 transition"
+                        >
+                          <FaTrash />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
       </div>
-
+  
       {/* Delete Confirmation Modal */}
       {resourceToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4">
@@ -241,7 +261,7 @@ const ResourceList = () => {
           </div>
         </div>
       )}
-
+  
       {/* Update Resource Modal */}
       {resourceToUpdate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4">
@@ -283,6 +303,23 @@ const ResourceList = () => {
                 </select>
               </div>
               <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Section</label>
+                <select
+                  name="section"
+                  value={formData.section}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border rounded-md"
+                  required
+                >
+                  <option value="">Select a section</option>
+                  {sections.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700">Supervisors</label>
                 <Select
                   isMulti
@@ -314,7 +351,7 @@ const ResourceList = () => {
           </div>
         </div>
       )}
-
+  
       {/* CSV Upload Modal */}
       {showCSVUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4">

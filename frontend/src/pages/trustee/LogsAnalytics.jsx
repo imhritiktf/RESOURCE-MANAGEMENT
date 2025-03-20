@@ -1,9 +1,9 @@
-import React from 'react'
+import { Outlet } from "react-router-dom";
 
-const LogsAnalytics = () => {
+export default function LogsAnalytics() {
   return (
-    <div>LogsAnalytics</div>
-  )
+    <div>
+      <Outlet /> {/* Render nested routes here */}
+    </div>
+  );
 }
-
-export default LogsAnalytics

@@ -21,7 +21,7 @@ exports.register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() }); // ✅ Ensure response is sent
     }
 
-    const { name, email, role, department, assignedResources } = req.body;
+    const { name, email, role, department, assignedResources, organization } = req.body;
     const requester = req.user;
 
     // ✅ Prevent infinite loop (Trustees should not be added here)
@@ -53,6 +53,7 @@ exports.register = async (req, res) => {
       role,
       department: role === "faculty" ? department : null,
       assignedResources: role === "supervisor" ? assignedResources : [],
+      organization
     });
 
     await newUser.save();
@@ -67,6 +68,7 @@ exports.register = async (req, res) => {
         email: newUser.email,
         name: newUser.name,
         department: newUser.department,
+        organization: newUser.organization,
       },
     });
   } catch (error) {

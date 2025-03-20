@@ -11,15 +11,21 @@ const checkSLABreach = async () => {
       status: "pending",
       $or: [
         { createdAt: { $lt: new Date(now - slaLimit) } }, // More than 48 hours old
-        { requestedDate: { $lt: now } } // Event date has already passed
+        { requestedDate: { $lt: now } }, // Event date has already passed
       ],
-      slaBreached: false // Only update if not already breached
+      "slaBreached.isBreached": false, // Only update if not already breached
     });
 
     if (breachedRequests.length > 0) {
       await Request.updateMany(
         { _id: { $in: breachedRequests.map(req => req._id) } },
-        { $set: { slaBreached: true } }
+        {
+          $set: {
+            "slaBreached.isBreached": true,
+            "slaBreached.breachedAt": now,
+            "slaBreached.reason": "48HoursExceeded", // or "eventDatePassed"
+          },
+        }
       );
       console.log(`${breachedRequests.length} requests marked as SLA breached.`);
     }
