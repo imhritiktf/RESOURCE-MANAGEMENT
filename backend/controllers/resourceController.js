@@ -10,7 +10,8 @@ const ResourceUsageLog = require("../models/ResourceUsageLog");
 // Create a new resource (Only trustees can add resources)
 exports.createResource = async (req, res) => {
   try {
-    const { name, description, organization, supervisors, section } = req.body;
+    const { name, description, organization, supervisors, section,slaTime } = req.body;
+
     console.log(name, description, organization, supervisors, section)
     // Ensure only trustees can create resources
     if (req.user.role !== "trustee") {
@@ -57,14 +58,20 @@ exports.createResource = async (req, res) => {
       });
     }
 
+    // Validate SLA time (must be a positive number and <= 10080 minutes (7 days))
+    if (slaTime && (typeof slaTime !== "number" || slaTime <= 0 || slaTime > 10080)) {
+      return res.status(400).json({ message: "SLA time must be a positive number and <= 10080 minutes (7 days)" });
+    }
+
     // Create the new resource
     const newResource = new Resource({
       name,
       description,
       organization,
       supervisors,
-      section, // Add the section field
-      availability: true, // Default to available when created
+      section,
+      availability: true,
+      slaTime: slaTime || 2880, // Default to 48 hours if not provided
     });
 
     await newResource.save();
@@ -76,7 +83,7 @@ exports.createResource = async (req, res) => {
 // Update Resource Controller
 exports.updateResource = async (req, res) => {
   const { id } = req.params; // Resource ID to update
-  const { name, organization, supervisors, description, availability, section } = req.body; // Updated data
+  const { name, organization, supervisors, description, availability, section, slaTime } = req.body; // Updated data
 
   try {
     // Validate the resource ID
@@ -99,6 +106,11 @@ exports.updateResource = async (req, res) => {
       return res.status(400).json({ message: "Invalid supervisor ID(s)" });
     }
 
+    // Validate SLA time (must be a positive number and <= 10080 minutes (7 days))
+    // if (slaTime && (typeof slaTime !== "number" || slaTime <= 0 || slaTime > 10080)) {
+    //   return res.status(400).json({ message: "SLA time must be a positive number and <= 10080 minutes (7 days)" });
+    // }
+
     // Find the resource by ID
     const resource = await Resource.findById(id);
     if (!resource) {
@@ -112,6 +124,7 @@ exports.updateResource = async (req, res) => {
     if (description) resource.description = description;
     if (availability !== undefined) resource.availability = availability;
     if (section) resource.section = section; // Update the section field
+    if (slaTime !== undefined) resource.slaTime = slaTime; // Update the SLA time field
 
     // Save the updated resource
     await resource.save();

@@ -11,7 +11,9 @@ const CreateResourceModal = ({ onClose }) => {
     description: "",
     organization: "", // Organization will be auto-filled
     supervisors: [], // Array of supervisor IDs
-    section: "", // New field for section
+    section: "", // Selected section
+    slaTime: 2880, // Default SLA time in minutes (48 hours)
+    newSection: "", // New section input
   });
 
   // Fetch supervisors for the dropdown
@@ -20,6 +22,18 @@ const CreateResourceModal = ({ onClose }) => {
     queryFn: async () => {
       const token = localStorage.getItem("token");
       const { data } = await axios.get("http://localhost:5000/api/auth?role=supervisor", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return data;
+    },
+  });
+
+  // Fetch sections for the dropdown (if available)
+  const { data: sections = [] } = useQuery({
+    queryKey: ["sections"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const { data } = await axios.get("http://localhost:5000/api/sections", {
         headers: { Authorization: `Bearer ${token}` },
       });
       return data;
@@ -55,12 +69,24 @@ const CreateResourceModal = ({ onClose }) => {
     }
 
     // Validate the section field
-    if (!formData.section) {
-      toast.error("Please select a section.");
+    if (!formData.section && !formData.newSection) {
+      toast.error("Please select or create a section.");
       return;
     }
 
-    addResourceMutation.mutate(formData);
+    // Validate SLA time
+    if (formData.slaTime <= 0 || formData.slaTime > 10080) {
+      toast.error("SLA time must be between 1 and 10080 minutes.");
+      return;
+    }
+
+    // Prepare the final resource data
+    const resourceData = {
+      ...formData,
+      section: formData.newSection || formData.section, // Use new section if provided
+    };
+
+    addResourceMutation.mutate(resourceData);
   };
 
   const handleChange = (e) => {
@@ -102,80 +128,142 @@ const CreateResourceModal = ({ onClose }) => {
     label: supervisor.name,
   }));
 
+  // Format sections for the dropdown
+  const sectionOptions = sections.map((section) => ({
+    value: section,
+    label: section,
+  }));
+
+  // Close modal when clicking outside
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
+      onClick={handleBackdropClick} // Close modal on outside click
+    >
+      <div className="bg-white p-6 rounded-lg shadow-lg w-[80%] max-w-4xl relative">
+        {/* Close Icon */}
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+
         <h2 className="text-xl font-bold mb-4">Add Resource</h2>
-        <form onSubmit={handleSubmit}>
-          {/* Name */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Name</label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              className="w-full p-2 border rounded-md"
-              required
-            />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Name and Description in a grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Name</label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full p-2 border rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                className="w-full p-2 border rounded-md"
+                required
+                rows={3} // Limit the height of the textarea
+              />
+            </div>
           </div>
 
-          {/* Description */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Description</label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              className="w-full p-2 border rounded-md"
-              required
-            />
+          {/* Organization and Section in a grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Organization</label>
+              <input
+                type="text"
+                name="organization"
+                value={formData.organization}
+                onChange={handleChange}
+                className="w-full p-2 border rounded-md bg-gray-100"
+                readOnly // Make the field read-only
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Section</label>
+              <select
+                name="section"
+                value={formData.section}
+                onChange={handleChange}
+                className="w-full p-2 border rounded-md"
+                required
+              >
+                <option value="">Select a section</option>
+                {sectionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                name="newSection"
+                value={formData.newSection}
+                onChange={handleChange}
+                className="w-full p-2 border rounded-md mt-2"
+                placeholder="Or create a new section"
+              />
+            </div>
           </div>
 
-          {/* Organization (auto-filled) */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Organization</label>
-            <input
-              type="text"
-              name="organization"
-              value={formData.organization}
-              onChange={handleChange}
-              className="w-full p-2 border rounded-md bg-gray-100"
-              readOnly // Make the field read-only
-            />
-          </div>
-
-          {/* Section */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Section</label>
-            <select
-              name="section"
-              value={formData.section}
-              onChange={handleChange}
-              className="w-full p-2 border rounded-md"
-              required
-            >
-              <option value="">Select a section</option>
-              <option value="Infrastructure">Infrastructure</option>
-              <option value="Plant and Machinery">Plant and Machinery</option>
-              <option value="Cleaning">Cleaning</option>
-              {/* Add more sections as needed */}
-            </select>
-          </div>
-
-          {/* Supervisors Dropdown */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700">Supervisors</label>
-            <Select
-              isMulti
-              options={supervisorOptions}
-              onChange={handleSupervisorChange}
-              className="w-full"
-              placeholder="Select supervisors..."
-              value={supervisorOptions.filter((option) =>
-                formData.supervisors.includes(option.value)
-              )}
-            />
+          {/* SLA Time and Supervisors in a grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">SLA Time (in minutes)</label>
+              <input
+                type="number"
+                name="slaTime"
+                value={formData.slaTime}
+                onChange={handleChange}
+                className="w-full p-2 border rounded-md"
+                min="1"
+                max="10080"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Supervisors</label>
+              <Select
+                isMulti
+                options={supervisorOptions}
+                onChange={handleSupervisorChange}
+                className="w-full"
+                placeholder="Select supervisors..."
+                value={supervisorOptions.filter((option) =>
+                  formData.supervisors.includes(option.value)
+                )}
+              />
+            </div>
           </div>
 
           {/* Buttons */}

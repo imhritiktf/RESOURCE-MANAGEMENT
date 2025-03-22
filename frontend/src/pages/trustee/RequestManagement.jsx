@@ -232,6 +232,7 @@ const RequestManagement = () => {
               <th className="p-4 font-semibold text-center">Priority</th>
               <th className="p-4 font-semibold text-center">Requested Date</th>
               <th className="p-4 font-semibold text-center">Status</th>
+              <th className="p-4 font-semibold text-center">Respond within</th>
               <th className="p-4 font-semibold text-center">Actions</th>
             </tr>
           </thead>
@@ -289,6 +290,10 @@ const RequestManagement = () => {
                       {request.status}
                     </span>
                   </td>
+                  <td className="p-4 text-gray-700 text-center">
+                    {request.resource?.slaTime/60 || "Unknown"} Hours
+                  </td>
+
                   <td className="p-4 text-center flex justify-center gap-4">
                     <button
                       className="text-blue-600 hover:text-blue-700 transition-all"
@@ -436,6 +441,7 @@ const RequestManagement = () => {
         </div>
       )}
 
+{/* details modal */}
       {selectedRequest && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl w-[500px] max-w-full transform transition-all scale-100 animate-fadeIn">
@@ -509,7 +515,7 @@ const RequestManagement = () => {
                     {selectedRequest.approvedBy?.name || "Unknown"}
                   </p>
                 )}
-            </div>
+            </div>  
 
             {/* Event Details */}
             <div className="mt-4">

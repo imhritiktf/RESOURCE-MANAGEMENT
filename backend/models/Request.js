@@ -24,16 +24,19 @@ const requestSchema = new mongoose.Schema({
     resolvedAt: { type: Date }, // When the breach was resolved
     resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Who resolved the breach
   },
+  inactiveStatus: { type: Boolean, default: false }, // Mark as inactive if SLA is breached
+  modifiedAt: { type: Date }, // Last modified timestamp
+  modifiedCount: { type: Number, default: 0 }, // Number of times the request has been modified
 
   // suspicious activity tracking
   suspiciousActivity: [
     {
-      type: { type: String, enum: ["tooFast", "tooLate"], required: true }, // Type of suspicious activity
+      type: { type: String, enum: ["tooFast", "tooLate", "anomaly"], required: true }, // Type of suspicious activity
+      actionType: { type: String, enum: ["approval", "rejection"], required: true }, // Whether it's an approval or rejection
       detectedAt: { type: Date, default: Date.now }, // When the activity was detected
-      details: { type: String }, // Additional details (example approved within a 10 sex)
+      details: { type: String }, // Additional details (e.g., "Unusual approval time detected by ML model")
     },
   ],
-
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 });
 
