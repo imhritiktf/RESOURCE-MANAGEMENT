@@ -310,7 +310,6 @@ exports.getResourceUsage = async (req, res) => {
     // Calculate key metrics
     const totalBookings = analytics.reduce((sum, item) => sum + item.totalBookings, 0);
     const averageDuration = analytics.reduce((sum, item) => sum + item.totalDuration, 0) / totalBookings || 0;
-
     res.json({
       mostUsedResources: analytics,
       totalBookings,
@@ -320,6 +319,7 @@ exports.getResourceUsage = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
 
 // Fetch booking trends (daily, weekly, monthly) 
 exports.getbookingUsage =  async (req, res) => {

@@ -4,7 +4,7 @@ const RequestLog = require("../models/RequestLog");
 const ResourceUsageLog = require("../models/ResourceUsageLog");
 const ApprovalLog = require("../models/ApprovalLog");
 const axios = require("axios");
-
+  
 
 // Create a new resource request
 exports.createRequest = async (req, res) => {
@@ -224,6 +224,16 @@ exports.getRequestLog = async (req, res) => {
   }
 };
 
+exports.getRequestCountByStatus = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const count = await Request.countDocuments({ status });
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+}
+
 // Delete a Request (Only before approval)
 exports.deleteRequest = async (req, res) => {
   try {
@@ -289,34 +299,32 @@ exports.updateRequestStatus = async (req, res) => {
     const { status, rejectionReason } = req.body;
     const request = await Request.findById(req.params.id)
       .populate("faculty", "organization")
-      .populate("resource", "slaTime"); // Populate resource to get SLA time
+      .populate("resource", "slaTime");
 
     if (!request) {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    // Check if the request is inactive and not being resubmitted
-    if (request.inactiveStatus && status !== "pending") {
-      return res.status(400).json({ message: "Inactive requests can only be resubmitted." });
+    // Check if the user is an approver (supervisor or trustee)
+    if (!["supervisor", "trustee"].includes(req.user.role)) {
+      return res.status(403).json({ message: "Only supervisors or trustees can approve or reject requests." });
     }
 
-    // Handle resubmission
-    if (request.inactiveStatus && status === "pending") {
-      request.inactiveStatus = false;
-      request.modifiedAt = new Date();
-      request.modifiedCount += 1;
-      request.slaBreached = {
-        isBreached: false,
-        breachedAt: null,
-        reason: null,
-        resolved: false,
-        resolvedAt: null,
-        resolvedBy: null,
-      };
+    // Check if the status is valid (approved or rejected)
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Only 'approved' or 'rejected' are allowed." });
+    }
+
+    // Check if the event date has passed
+    const now = new Date();
+    if (request.requestedDate < now) {
+      request.status = "rejected";
+      request.rejectionReason = "Event date has passed";
+      await request.save();
+      return res.json({ message: "Request rejected automatically as the event date has passed." });
     }
 
     // 🚨 Suspicious Activity Detection
-    const now = new Date();
     const timeSinceRequest = (now - request.createdAt) / 1000; // Convert to seconds
     let suspiciousActivity = request.suspiciousActivity || [];
 
@@ -370,17 +378,11 @@ exports.updateRequestStatus = async (req, res) => {
       request.rejectionReason = undefined;
     }
 
-    // Resolve SLA breach if the request is approved or rejected
+    // Automatically resolve SLA breach if the request is approved or rejected
     if (request.slaBreached.isBreached && !request.slaBreached.resolved) {
       request.slaBreached.resolved = true;
       request.slaBreached.resolvedAt = now;
       request.slaBreached.resolvedBy = req.user._id;
-    }
-
-    // Automatically reject requests with passed event dates
-    if (request.requestedDate < now && status === "pending") {
-      request.status = "rejected";
-      request.rejectionReason = "Event date has passed";
     }
 
     await request.save();
@@ -419,83 +421,133 @@ exports.updateRequestStatus = async (req, res) => {
       suspiciousActivity,
     });
   } catch (error) {
-    console.error("Error in updateRequestStatus:", error); // Log the full error
+    console.error("Error in updateRequestStatus:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
-exports.getSlaBreachedRequests = async (req, res) => {
+exports.resubmitRequest = async (req, res) => {
   try {
-    // Ensure only trustees can access this
-    if (req.user.role !== "trustee") {
-      return res.status(403).json({ message: "Access denied! Only trustees can view SLA-breached requests." });
+    const request = await Request.findById(req.params.id)
+      .populate("faculty", "organization")
+      .populate("resource", "slaTime");
+
+    if (!request) {
+      return res.status(404).json({ message: "Request not found" });
     }
 
-    const { organization, startDate, endDate, slaTime } = req.query;
-
-    // Match stage for filtering
-    const match = { "slaBreached.isBreached": true };
-    if (organization) match.organization = organization;
-
-    // Add date range filter if startDate and endDate are provided
-    if (startDate && endDate) {
-      match["slaBreached.breachedAt"] = { $gte: new Date(startDate), $lte: new Date(endDate) };
-    } else if (startDate) {
-      match["slaBreached.breachedAt"] = { $gte: new Date(startDate) };
-    } else if (endDate) {
-      match["slaBreached.breachedAt"] = { $lte: new Date(endDate) };
+    // Check if the user is a faculty (requester)
+    if (req.user.role !== "faculty") {
+      return res.status(403).json({ message: "Only faculty can resubmit requests." });
     }
 
-    // Fetch all SLA breaches (both pending and resolved)
-    const logs = await Request.find(match)
-      .populate("faculty", "name email department")
-      .populate("resource", "name organization slaTime") // Include slaTime from Resource
-      .select("_id faculty resource slaBreached inactiveStatus modifiedAt modifiedCount");
+    // Check if the request is inactive
+    if (!request.inactiveStatus) {
+      return res.status(400).json({ message: "Only inactive requests can be resubmitted." });
+    }
 
-    // Format logs and handle null values
-    const formattedLogs = logs.map((log) => ({
-      requestId: log._id,
-      facultyName: log.faculty ? log.faculty.name : "Unknown Faculty",
-      resourceName: log.resource ? log.resource.name : "Unknown Resource",
-      slaTime: log.resource ? log.resource.slaTime : 2880, // Default to 48 hours if not set
-      breachedAt: log.slaBreached.breachedAt,
-      resolvedAt: log.slaBreached.resolvedAt,
-      reason: log.slaBreached.reason,
-      resolved: log.slaBreached.resolved,
-      inactiveStatus: log.inactiveStatus, // Include inactive status
-      modifiedAt: log.modifiedAt, // Include last modified timestamp
-      modifiedCount: log.modifiedCount, // Include modification count
-    }));
+    // Check if the event date has passed
+    const now = new Date();
+    if (request.requestedDate < now) {
+      request.status = "rejected";
+      request.rejectionReason = "Event date has passed";
+      await request.save();
+      return res.json({ message: "Request rejected automatically as the event date has passed." });
+    }
 
-    // Separate pending and resolved breaches
-    const pendingBreaches = formattedLogs.filter((log) => !log.resolved);
-    const resolvedBreaches = formattedLogs.filter((log) => log.resolved);
+    // Handle resubmission
+    request.inactiveStatus = false; // Mark the request as active
+    request.status = "pending"; // Set status to pending
+    request.modifiedAt = new Date();
+    request.modifiedCount += 1;
+    request.slaBreached = {
+      isBreached: false,
+      breachedAt: null,
+      reason: null,
+      resolved: false,
+      resolvedAt: null,
+      resolvedBy: null,
+    };
 
-    // Fetch SLA breach trends
-    const trends = await Request.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$slaBreached.breachedAt" } },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-      {
-        $project: {
-          date: "$_id",
-          count: 1,
-          _id: 0,
-        },
-      },
-    ]);
+    await request.save();
 
-    res.json({ pendingBreaches, resolvedBreaches, trends });
+    res.json({ message: "Request resubmitted successfully.", request });
   } catch (error) {
-    console.error("Error in getSlaBreachedRequests:", error); // Log the error
+    console.error("Error in resubmitRequest:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+  exports.getSlaBreachedRequests = async (req, res) => {
+    try {
+      // Ensure only trustees can access this
+      if (req.user.role !== "trustee") {
+        return res.status(403).json({ message: "Access denied! Only trustees can view SLA-breached requests." });
+      }
+
+      const { organization, startDate, endDate, slaTime } = req.query;
+
+      // Match stage for filtering
+      const match = { "slaBreached.isBreached": true };
+      if (organization) match.organization = organization;
+
+      // Add date range filter if startDate and endDate are provided
+      if (startDate && endDate) {
+        match["slaBreached.breachedAt"] = { $gte: new Date(startDate), $lte: new Date(endDate) };
+      } else if (startDate) {
+        match["slaBreached.breachedAt"] = { $gte: new Date(startDate) };
+      } else if (endDate) {
+        match["slaBreached.breachedAt"] = { $lte: new Date(endDate) };
+      }
+
+      // Fetch all SLA breaches (both pending and resolved)
+      const logs = await Request.find(match)
+        .populate("faculty", "name email department")
+        .populate("resource", "name organization slaTime") // Include slaTime from Resource
+        .select("_id faculty resource slaBreached inactiveStatus modifiedAt modifiedCount");
+
+      // Format logs and handle null values
+      const formattedLogs = logs.map((log) => ({
+        requestId: log._id,
+        facultyName: log.faculty ? log.faculty.name : "Unknown Faculty",
+        resourceName: log.resource ? log.resource.name : "Unknown Resource",
+        slaTime: log.resource ? log.resource.slaTime : 2880, // Default to 48 hours if not set
+        breachedAt: log.slaBreached.breachedAt,
+        resolvedAt: log.slaBreached.resolvedAt,
+        reason: log.slaBreached.reason,
+        resolved: log.slaBreached.resolved,
+        inactiveStatus: log.inactiveStatus, // Include inactive status
+        modifiedAt: log.modifiedAt, // Include last modified timestamp
+        modifiedCount: log.modifiedCount, // Include modification count
+      }));
+
+      // Separate pending and resolved breaches
+      const pendingBreaches = formattedLogs.filter((log) => !log.resolved);
+      const resolvedBreaches = formattedLogs.filter((log) => log.resolved);
+
+      // Fetch SLA breach trends
+      const trends = await Request.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$slaBreached.breachedAt" } },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+        {
+          $project: {
+            date: "$_id",
+            count: 1,
+            _id: 0,
+          },
+        },
+      ]);
+
+      res.json({ pendingBreaches, resolvedBreaches, trends });
+    } catch (error) {
+      console.error("Error in getSlaBreachedRequests:", error); // Log the error
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  };
 exports.getSuspiciousRequests = async (req, res) => {
   try {
     if (req.user.role !== "trustee") {

@@ -6,19 +6,15 @@ import toast from "react-hot-toast";
 import debounce from "lodash.debounce"; // Import debounce
 
 const RequestManagement = () => {
-  const [filterStatus, setFilterStatus] = useState("all"); // Default to "all"
-  const [selectedRequest, setSelectedRequest] = useState(null); // View Details
-  const [requestToProcess, setRequestToProcess] = useState(null); // Approve/Reject Action
-  const [action, setAction] = useState(null); // "approve" or "reject"
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [requestToProcess, setRequestToProcess] = useState(null);
+  const [action, setAction] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
-
-  // Sorting & Filtering States
   const [searchFaculty, setSearchFaculty] = useState("");
   const [searchResource, setSearchResource] = useState("");
   const [sortByDate, setSortByDate] = useState("newest");
   const [sortByPriority, setSortByPriority] = useState("urgent");
-
-  // Pagination State
   const [page, setPage] = useState(1);
   const limit = 10;
 
@@ -28,7 +24,7 @@ const RequestManagement = () => {
   const debouncedSearchFaculty = useCallback(
     debounce((value) => {
       setSearchFaculty(value);
-      setPage(1); // Reset to first page when search changes
+      setPage(1);
     }, 300),
     []
   );
@@ -36,11 +32,12 @@ const RequestManagement = () => {
   const debouncedSearchResource = useCallback(
     debounce((value) => {
       setSearchResource(value);
-      setPage(1); // Reset to first page when search changes
+      setPage(1);
     }, 300),
     []
   );
 
+  // Fetch requests
   const { data, isLoading, error } = useQuery({
     queryKey: [
       "requests",
@@ -56,7 +53,7 @@ const RequestManagement = () => {
       const { data } = await axios.get("http://localhost:5000/api/requests", {
         headers: { Authorization: `Bearer ${token}` },
         params: {
-          status: filterStatus === "all" ? undefined : filterStatus, // Send undefined for "all"
+          status: filterStatus === "all" ? undefined : filterStatus,
           facultyName: searchFaculty,
           resourceName: searchResource,
           sortBy: sortByDate === "newest" ? "-requestedDate" : "requestedDate",
@@ -70,27 +67,47 @@ const RequestManagement = () => {
     keepPreviousData: true,
   });
 
+  const { data: pendingRequestsCount, refetch: refetchPendingCount } = useQuery({
+    queryKey: ["pendingRequestsCount"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const { data } = await axios.get("http://localhost:5000/api/requests/count", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { status: "pending" },
+      });
+      return data.count;
+    },
+  });
+  
   const updateRequestMutation = useMutation({
     mutationFn: async ({ requestId, status, reason }) => {
       const token = localStorage.getItem("token");
-      await axios.put(
+      const { data } = await axios.put(
         `http://localhost:5000/api/requests/${requestId}/status`,
         { status, rejectionReason: reason },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      return data;
     },
-    onSuccess: () => {
-      toast.success("Request updated successfully!");
+    onSuccess: (data) => {
+      toast.success(data.message || "Request updated successfully!");
+      
+      // Invalidate the "requests" query
       queryClient.invalidateQueries({ queryKey: ["requests"] });
+  
+      // Manually refetch the pending requests count
+      refetchPendingCount();
+  
       setRequestToProcess(null);
       setAction(null);
     },
-    onError: () => {
-      toast.error("Failed to update request. Try again.");
+    onError: (error) => {
+      const errorMessage = error.response?.data?.message || "Something went wrong!";
+      toast.error(errorMessage);
     },
   });
 
-  // Function to clear all filters
+  // Clear filters
   const clearFilters = () => {
     setFilterStatus("all");
     setSearchFaculty("");
@@ -100,25 +117,21 @@ const RequestManagement = () => {
     setPage(1);
   };
 
-  if (isLoading)
-    return <p className="text-center text-gray-600">Loading requests...</p>;
-  if (error)
-    return <p className="text-center text-red-500">Error: {error.message}</p>;
+  if (isLoading) return <p className="text-center text-gray-600">Loading requests...</p>;
+  if (error) return <p className="text-center text-red-500">Error: {error.message}</p>;
 
   const { requests, totalPages, totalCount } = data;
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <h2 className="text-3xl font-bold text-gray-800 mb-6">
-        Request Management
-      </h2>
+      <h2 className="text-3xl font-bold text-gray-800 mb-6">Request Management</h2>
 
-      {/*  Filtering Options */}
+      {/* Filtering Options */}
       <div className="flex gap-6 mb-6">
         {["all", "pending", "approved", "rejected"].map((status) => (
           <label
             key={status}
-            className="flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-2 cursor-pointer relative"
           >
             <input
               type="radio"
@@ -126,7 +139,7 @@ const RequestManagement = () => {
               checked={filterStatus === status}
               onChange={() => {
                 setFilterStatus(status);
-                setPage(1); // Reset to first page when filter changes
+                setPage(1);
               }}
               className="hidden"
             />
@@ -141,10 +154,15 @@ const RequestManagement = () => {
                 ? "All Requests"
                 : status.charAt(0).toUpperCase() + status.slice(1)}
             </span>
+            {/* Show pending requests count */}
+            {status === "pending" && pendingRequestsCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                {pendingRequestsCount}
+              </span>
+            )}
           </label>
         ))}
       </div>
-
       {/*  Search & Sorting */}
       <div className="flex flex-wrap gap-4 mb-6">
         {/* Search Faculty */}

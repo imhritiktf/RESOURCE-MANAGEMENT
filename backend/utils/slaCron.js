@@ -30,7 +30,7 @@ const checkSLABreach = async () => {
           $set: {
             "slaBreached.isBreached": true,
             "slaBreached.breachedAt": now,
-            "slaBreached.reason": "48HoursExceeded", // or "eventDatePassed"
+            "slaBreached.reason": "SLA time exceeded", // or "eventDatePassed"
             inactiveStatus: true, // Mark as inactive
           },
         }

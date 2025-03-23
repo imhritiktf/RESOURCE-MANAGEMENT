@@ -64,24 +64,6 @@ const SLABreach = () => {
     queryFn: () => fetchSLABreach(filters),
   });
 
-  // Function to resolve SLA breach
-  const resolveSLABreach = async (requestId) => {
-    const confirmed = window.confirm("Are you sure you want to resolve this SLA breach?");
-    if (!confirmed) return;
-
-    try {
-      const response = await axios.put(
-        `http://localhost:5000/api/requests/${requestId}/resolve-breach`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      console.log("SLA breach resolved:", response.data);
-      refetch(); // Refresh the data after resolving the breach
-    } catch (error) {
-      console.error("Error resolving SLA breach:", error);
-    }
-  };
-
   if (isBreachLoading) return <LoadingSkeleton />;
   if (isBreachError) return <div className="text-center py-8 text-red-500">Error fetching data</div>;
 
@@ -148,7 +130,6 @@ const SLABreach = () => {
                 <th className="p-2">SLA Time (mins)</th>
                 <th className="p-2">Breached At</th>
                 <th className="p-2">Reason</th>
-                <th className="p-2">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -160,14 +141,6 @@ const SLABreach = () => {
                   <td className="p-2">{log.slaTime}</td>
                   <td className="p-2">{new Date(log.breachedAt).toLocaleString()}</td>
                   <td className="p-2">{log.reason}</td>
-                  <td className="p-2">
-                    <button
-                      onClick={() => resolveSLABreach(log.requestId)}
-                      className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600"
-                    >
-                      Resolve
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
