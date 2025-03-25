@@ -217,3 +217,27 @@ exports.getAllUsers = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
+exports.getMe =  async (req, res) => {
+  try {
+    // Fetch the user's details from the database using the ID from the token
+    const user = await User.findById(req.user._id).select("-password"); // Exclude the password field
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Return the user's details, including their role
+    res.status(200).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role, // Assuming the role is stored in the User model
+    });
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+

@@ -84,7 +84,7 @@ exports.createResource = async (req, res) => {
 exports.updateResource = async (req, res) => {
   const { id } = req.params; // Resource ID to update
   const { name, organization, supervisors, description, availability, section, slaTime } = req.body; // Updated data
-
+console.log(name, organization, supervisors, description, availability, section, slaTime)
   try {
     // Validate the resource ID
     if (!isValidObjectId(id)) {

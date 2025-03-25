@@ -1,6 +1,6 @@
 const express = require("express");
 const { check } = require("express-validator");
-const { register, login, getAllUsers, getUserProfile, deleteUser, updateUser } = require("../controllers/authController");
+const { register, login, getAllUsers, getUserProfile, deleteUser, updateUser, getMe } = require("../controllers/authController");
 const { protect, isTrustee } = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -41,6 +41,7 @@ router.put("/:id/update-user", protect, isTrustee, updateUser);
 
 // Delete User (Trustee Only)
 router.delete("/:userId", protect, isTrustee, deleteUser);
+router.get("/me", protect, getMe );
 
 
 module.exports = router;

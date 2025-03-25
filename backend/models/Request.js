@@ -19,8 +19,8 @@ const requestSchema = new mongoose.Schema({
   slaBreached: {
     isBreached: { type: Boolean, default: false }, // Whether SLA is breached
     breachedAt: { type: Date }, // When the SLA was breached
-    reason: { type: String, enum: ["eventDatePassed", "48HoursExceeded"] }, // Reason for breach
-    resolved: { type: Boolean, default: false }, // Whether the breach has been resolved
+    reason: { type: String, enum: ["eventDatePassed", "slaTimeExceeded"] }, // Reason for breach
+    resolved: { type: Boolean, default: false },  // Whether the breach has been resolved
     resolvedAt: { type: Date }, // When the breach was resolved
     resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Who resolved the breach
   },

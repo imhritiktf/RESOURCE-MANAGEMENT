@@ -9,9 +9,12 @@ const {
   getRequestLog,
   getRequestLogByRequestId,
   getSlaBreachedRequests,
-  resolveSLABreach,
   getSLAMetrics,
   getRequestCountByStatus,
+  getFacultyLogs,
+  getTrusteeLogs,
+  getSupervisorLogs,
+  resubmitRequest,
   } = require("../controllers/requestController");
 const {
   protect,
@@ -38,5 +41,17 @@ router.get(
 router.get("/sla-breached", protect, isTrustee, getSlaBreachedRequests);
 router.get("/suspicious-activities", protect, isTrustee, getSuspiciousRequests);
 router.get("/sla-metrics", protect, isTrustee, getSLAMetrics);
+router.put("/:id/resubmit",protect, resubmitRequest);
 
+
+//logs
+
+// faculty logs
+router.get("/faculty/logs", getFacultyLogs);
+
+// Trustee logs
+router.get("/trustee/logs", getTrusteeLogs);
+
+// Supervisor logs
+router.get("/supervisor/logs", getSupervisorLogs);
 module.exports = router;

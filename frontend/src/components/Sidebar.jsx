@@ -9,8 +9,10 @@ export default function Sidebar() {
 
   const navLinks = {
     faculty: [
+      { path: "/faculty-dashboard", label: "Dashboard", icon: <FaClipboardList /> },
+      { path: "/faculty-dashboard/new-request", label: "New Request", icon: <FaClipboardList /> },
       { path: "/faculty-dashboard/requests", label: "My Requests", icon: <FaClipboardList /> },
-      { path: "/faculty-dashboard/history", label: "Request History", icon: <FaChartBar /> },
+      { path: "/faculty-dashboard/booking-history", label: "Booking History", icon: <FaChartBar /> },
     ],
     supervisor: [
       { path: "/supervisor-dashboard/pending", label: "Pending Approvals", icon: <FaClipboardList /> },

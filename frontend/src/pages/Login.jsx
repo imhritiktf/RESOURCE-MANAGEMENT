@@ -21,15 +21,14 @@ export default function Login() {
       const { data } = await axios.post("http://localhost:5000/api/auth/login", {
         email,
         password,
-        
       });
   
       console.log("Login Response:", data); // Debugging
       console.log("User Data:", data.user); // Inspect user data structure
-
+  
       login(data); // Save user in context & localStorage
   
-      const role = data.user.role;  
+      const role = data.user.role;
       if (role === "faculty") navigate("/faculty-dashboard");
       else if (role === "supervisor") navigate("/supervisor-dashboard");
       else if (role === "trustee") navigate("/trustee-dashboard");

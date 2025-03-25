@@ -7,17 +7,17 @@ const token = localStorage.getItem("token");
 const fetchRequestLogs = async ({ role, userId }) => {
   const endpoint =
     role === "faculty"
-      ? "http://localhost:5000/api/requests/faculty/logs"
+      ? "http://localhost:5000/api/logs/faculty"
       : role === "supervisor"
-      ? "http://localhost:5000/api/requests/supervisor/logs"
-      : "http://localhost:5000/api/requests/trustee/logs";
+      ? "http://localhost:5000/api/logs/supervisor"
+      : "http://localhost:5000/api/logs/trustee";
 
   const response = await axios.get(endpoint, {
     headers: {
       Authorization: `Bearer ${token}`,
       "Cache-Control": "no-cache",
     },
-    params: { userId },
+    params: { userId }, // Pass userId for faculty and supervisor
   });
   return response.data;
 };
@@ -39,22 +39,17 @@ const RequestHistory = ({ userRole, userId }) => {
     staleTime: 0, // Data is immediately stale
   });
 
-  console.log("Request Logs:", requestLogs); // Debugging
-
   // Force refetch when role or userId changes
   useEffect(() => {
     refetch();
   }, [userRole, userId, refetch]);
 
   const filteredLogs = requestLogs?.filter((log) => {
-    const request = log.request || {}; // Fallback to an empty object
-    const faculty = request.faculty || {}; // Fallback to an empty object
-
     const matchesSearchQuery =
-      request.eventDetails?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.request.eventDetails.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.actionBy.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faculty.name?.toLowerCase().includes(searchQuery.toLowerCase());
+      log.request.faculty.name.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatusFilter = filterStatus === "all" || log.action === filterStatus;
 
@@ -86,7 +81,7 @@ const RequestHistory = ({ userRole, userId }) => {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">Request Logs - {userRole}</h1>
+      <h1 className="text-2xl font-bold mb-6 text-blue-950">Request Logs</h1>
       <div className="mb-6 flex justify-end">
         <div>
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Color Identification</h3>
@@ -156,11 +151,9 @@ const RequestHistory = ({ userRole, userId }) => {
                   onClick={() => setSelectedLog(log)}
                   style={{ cursor: "pointer" }}
                 >
-                  <td className="p-4 text-gray-700">{log.request?.faculty?.name || "N/A"}</td>
+                  <td className="p-4 text-gray-700">{log.request.faculty.name}</td>
                   <td className="p-4 text-gray-700">
-                    {log.request?.requestedDate
-                      ? new Date(log.request.requestedDate).toLocaleDateString()
-                      : "N/A"}
+                    {new Date(log.request.requestedDate).toLocaleDateString()}
                   </td>
                   <td className="p-4 text-center">
                     <span
@@ -206,14 +199,12 @@ const RequestHistory = ({ userRole, userId }) => {
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-gray-700 mt-4">
-              <p><strong>Faculty:</strong> {selectedLog.request?.faculty?.name || "N/A"}</p>
-              <p><strong>Email:</strong> {selectedLog.request?.faculty?.email || "N/A"}</p>
-              <p><strong>Department:</strong> {selectedLog.request?.faculty?.department || "N/A"}</p>
+              <p><strong>Faculty:</strong> {selectedLog.request.faculty.name}</p>
+              <p><strong>Email:</strong> {selectedLog.request.faculty.email}</p>
+              <p><strong>Department:</strong> {selectedLog.request.faculty.department}</p>
               <p>
                 <strong>Requested Date:</strong>{" "}
-                {selectedLog.request?.requestedDate
-                  ? new Date(selectedLog.request.requestedDate).toLocaleDateString()
-                  : "N/A"}
+                {new Date(selectedLog.request.requestedDate).toLocaleDateString()}
               </p>
               <p>
                 <strong>Action:</strong>{" "}
@@ -240,11 +231,11 @@ const RequestHistory = ({ userRole, userId }) => {
             <div className="mt-4">
               <p className="font-semibold text-gray-800">Event Details:</p>
               <div className="bg-gray-100 p-3 rounded-md text-gray-700 max-h-28 overflow-y-auto border">
-                {selectedLog.request?.eventDetails || "N/A"}
+                {selectedLog.request.eventDetails}
               </div>
             </div>
 
-            {selectedLog.request?.rejectionReason && (
+            {selectedLog.request.rejectionReason && (
               <div className="mt-4">
                 <p className="font-semibold text-red-600">Rejection Reason:</p>
                 <div className="bg-red-100 p-3 rounded-md text-red-700 border">

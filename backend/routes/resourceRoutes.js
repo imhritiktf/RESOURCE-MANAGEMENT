@@ -26,8 +26,8 @@
     upload.single("file"),
     uploadResourcesCSV
     ); //for bulk upload resource trustee only 
-    router.put("/:id", isTrustee, updateResource); // trustee only
-    router.get("/sections", getSections); // all can access
+    router.put("/:id",protect, isTrustee, updateResource); // trustee only
+    router.get("/sections",protect, getSections); // all can access
     router.get("/resource-usage", protect, isTrustee, getResourceUsage); // Only admin can view resource usage
     router.get("/booking-trends", protect, isTrustee, getbookingUsage); //only admin can Fetch booking trends (daily, weekly, monthly)
     router.get("/resource-utilization", protect, isTrustee, getResourceUtlization);
