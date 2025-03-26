@@ -1,16 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import useFacultyRequests from "../../hooks/useFacultyRequests";
 import { FaClock, FaCheckCircle, FaTimesCircle, FaSyncAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 const FacultyDashboard = () => {
-  // All hooks at the top, unconditionally
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useFacultyRequests();
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const navigate = useNavigate();
 
-  // Function to format time ago (days, hours, minutes)
-  const getTimeAgo = (date) => {
+  // Memoize the time formatting function
+  const getTimeAgo = useCallback((date) => {
     if (!date) return "N/A";
     const now = new Date();
     const createdDate = new Date(date);
@@ -24,21 +25,32 @@ const FacultyDashboard = () => {
     if (hours >= 1) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
     if (minutes >= 0) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
     return "N/A";
-  };
+  }, []);
 
-  // Extract requests from data
+  // Debugging effects
+  useEffect(() => {
+    console.log("Current user:", user);
+    console.log("Requests data:", data);
+  }, [user, data]);
+
+  useEffect(() => {
+    if (user?.id) {  // Changed from _id to id to match your user object
+      refetch();
+    }
+  }, [user?.id, refetch]);
+
+  // Derived data - calculated after hooks but before early returns
   const requests = data?.requests || [];
   const totalRequests = requests.length;
   const pendingRequests = requests.filter((req) => req.status === "pending");
   const approvedRequests = requests.filter((req) => req.status === "approved");
   const rejectedRequests = requests.filter((req) => req.status === "rejected");
 
-  // Calculate percentages for progress bars
   const pendingPercentage = totalRequests ? (pendingRequests.length / totalRequests) * 100 : 0;
   const approvedPercentage = totalRequests ? (approvedRequests.length / totalRequests) * 100 : 0;
   const rejectedPercentage = totalRequests ? (rejectedRequests.length / totalRequests) * 100 : 0;
 
-  // Conditional rendering for loading and error states
+  // Early returns - only after all hooks and derived data
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -261,14 +273,15 @@ const FacultyDashboard = () => {
               </button>
             </div>
             <div className="grid grid-cols-2 gap-4 text-gray-700 mt-4">
+              
               <p>
-                <strong>Faculty:</strong> {selectedRequest.faculty?.name || "Unknown"}
-              </p>
-              <p>
-                <strong>Organization:</strong> {selectedRequest.organization || "N/A"}
+                <strong>Organization:</strong> {selectedRequest.resource?.organization || "N/A"}
               </p>
               <p>
                 <strong>Resource:</strong> {selectedRequest.resource?.name || "Unknown"}
+              </p>
+              <p>
+                <strong>Duration Days:</strong> {selectedRequest.durationDays || "Unknown"}
               </p>
               <p>
                 <strong>Priority:</strong>
@@ -283,14 +296,14 @@ const FacultyDashboard = () => {
                 </span>
               </p>
               <p>
-                <strong>Requested Date:</strong>{" "}
+                <strong>Event Date:</strong>{" "}
                 {new Date(selectedRequest.requestedDate).toLocaleDateString()}
               </p>
               <p>
-                <strong>Pending Since:</strong> {getTimeAgo(selectedRequest.createdAt)}
+                <strong>Requested At:</strong> {getTimeAgo(selectedRequest.createdAt)}
               </p>
               <p>
-                <strong>Respond Within:</strong>{" "}
+                <strong>SLA Time Limit:</strong>{" "}
                 {selectedRequest.resource?.slaTime
                   ? `${Math.floor(selectedRequest.resource.slaTime / 60)} hour${
                       Math.floor(selectedRequest.resource.slaTime / 60) !== 1 ? "s" : ""
@@ -363,12 +376,7 @@ const FacultyDashboard = () => {
               </div>
             )}
             <div className="flex justify-end mt-6 gap-4">
-              <button
-                onClick={() => navigate(`/requests/${selectedRequest._id}`)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-              >
-                View Full Details
-              </button>
+              
               <button
                 onClick={() => setSelectedRequest(null)}
                 className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition"

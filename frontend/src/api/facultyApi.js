@@ -33,11 +33,19 @@ export const resubmitRequest = async ({ requestId, ...requestData }) => {
 
 // Fetch faculty requests
 export const getFacultyRequests = async (filters) => {
-  const { data } = await axios.get("http://localhost:5000/api/requests/my-requests", {
-    headers: { Authorization: `Bearer ${token}` },
-    params: filters,
-  });
-  return data;
+  const token = localStorage.getItem("token");
+  
+  try {
+    const { data } = await axios.get("http://localhost:5000/api/requests/my-requests", {
+      headers: { 
+        Authorization: `Bearer ${token}` 
+      },
+      params: filters,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Failed to fetch requests");
+  }
 };
 
 // Delete a request

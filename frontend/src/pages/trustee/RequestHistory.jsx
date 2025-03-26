@@ -209,8 +209,10 @@ const RequestHistory = ({ userRole, userId }) => {
               <p><strong>Faculty:</strong> {selectedLog.request?.faculty?.name || "N/A"}</p>
               <p><strong>Email:</strong> {selectedLog.request?.faculty?.email || "N/A"}</p>
               <p><strong>Department:</strong> {selectedLog.request?.faculty?.department || "N/A"}</p>
+              <p><strong>Resource:</strong> {selectedLog.request?.resource?.name || "N/A"}</p>
+              <p><strong>Duration Days:</strong> {selectedLog.request?.durationDays || "N/A"}</p>
               <p>
-                <strong>Requested Date:</strong>{" "}
+                <strong>Event Date:</strong>{" "}
                 {selectedLog.request?.requestedDate
                   ? new Date(selectedLog.request.requestedDate).toLocaleDateString()
                   : "N/A"}
@@ -232,7 +234,7 @@ const RequestHistory = ({ userRole, userId }) => {
               <p><strong>Action By:</strong> {selectedLog.actionBy.name}</p>
               <p><strong>Role:</strong> {selectedLog.actionBy.role}</p>
               <p>
-                <strong>Timestamp:</strong>{" "}
+                <strong>Requested At:</strong>{" "}
                 {new Date(selectedLog.timestamp).toLocaleString()}
               </p>
             </div>

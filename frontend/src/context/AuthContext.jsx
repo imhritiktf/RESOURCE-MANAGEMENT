@@ -1,25 +1,27 @@
-import { createContext, useContext, useState, useEffect } from "react";
+// context/AuthContext.js
+import { createContext, useContext, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(() => {
     const storedUser = localStorage.getItem("user");
-    console.log("Initializing user from localStorage:", storedUser); // Debugging
     return storedUser ? JSON.parse(storedUser) : null;
   });
 
   const login = (userData) => {
-    console.log("Logging in user:", userData.user); // Debugging
     localStorage.setItem("user", JSON.stringify(userData.user));
     localStorage.setItem("token", userData.token);
     setUser(userData.user);
+    queryClient.removeQueries(); // Clear all queries on login
   };
 
   const logout = () => {
-    console.log("Logging out user"); // Debugging
     localStorage.removeItem("user");
     localStorage.removeItem("token");
+    queryClient.removeQueries(); // Clear all queries on logout
     setUser(null);
   };
 
@@ -31,5 +33,9 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 }

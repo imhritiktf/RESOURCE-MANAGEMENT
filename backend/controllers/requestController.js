@@ -206,7 +206,7 @@ exports.getFacultyRequests = async (req, res) => {
 
     // Fetch requests
     const requests = await Request.find(filterOptions)
-      .populate("resource", "name slaTime")
+      .populate("resource", "name slaTime organization")
       .populate("approvedBy", "name")
       .sort(sortOptions)
       .skip(skip)
@@ -301,11 +301,18 @@ exports.getFacultyLogs = async (req, res) => {
     const logs = await ApprovalLog.find({ request: { $in: requestIds } })
       .populate({
         path: "request",
-        select: "eventDetails requestedDate faculty rejectionReason",
-        populate: {
-          path: "faculty",
-          select: "name email department",
-        },
+        select: "eventDetails requestedDate faculty rejectionReason durationDays",
+        populate: [
+          {
+            path: "resource",
+            select: "name",
+          },
+          {
+            path: "faculty",
+            select: "name email department",
+          }
+        ]
+        
       })
       .populate("actionBy", "name email role")
       .sort({ timestamp: -1 });
@@ -328,11 +335,17 @@ exports.getTrusteeLogs = async (req, res) => {
     const logs = await ApprovalLog.find()
       .populate({
         path: "request",
-        select: "eventDetails requestedDate faculty rejectionReason",
-        populate: {
-          path: "faculty",
-          select: "name email department",
-        },
+        select: "eventDetails requestedDate faculty rejectionReason durationDays",
+        populate: [
+          {
+            path: "resource",
+            select: "name",
+          },
+          {
+            path: "faculty",
+            select: "name email department",
+          }
+        ]
       })
       .populate("actionBy", "name email role")
       .sort({ timestamp: -1 });
@@ -362,11 +375,18 @@ exports.getSupervisorLogs = async (req, res) => {
     const logs = await ApprovalLog.find({ "request.resource": { $in: user.assignedResources } })
       .populate({
         path: "request",
-        select: "eventDetails requestedDate faculty rejectionReason",
-        populate: {
-          path: "faculty",
-          select: "name email department",
-        },
+        select: "eventDetails requestedDate faculty rejectionReason durationDays",
+        populate: [
+          {
+            path: "resource",
+            select: "name",
+          },
+          {
+            path: "faculty",
+            select: "name email department",
+          }
+        ]
+
       })
       .populate("actionBy", "name email role")
       .sort({ timestamp: -1 });
@@ -556,8 +576,6 @@ exports.updateRequestStatus = async (req, res) => {
     request.approvalTime = now;
     request.suspiciousActivity = suspiciousActivity;
     request.lastUpdatedBy = req.user._id;
-    request.modifiedAt = now; // Update modified timestamp
-    request.modifiedCount += 1; // Increment modification count
 
     if (status === "rejected") {
       request.rejectionReason = rejectionReason || "No reason provided";

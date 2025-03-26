@@ -2,22 +2,22 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { toast } from "react-hot-toast";
-import Select from "react-select"; // For dropdown
+import Select from "react-select";
 
 const CreateResourceModal = ({ onClose }) => {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    organization: "", // Organization will be auto-filled
-    supervisors: [], // Array of supervisor IDs
-    section: "", // Selected section
-    slaTime: 2880, // Default SLA time in minutes (48 hours)
-    newSection: "", // New section input
+    organization: "",
+    supervisors: [],
+    section: "",
+    slaTime: 2880,
+    newSection: "",
   });
 
-  // Fetch supervisors for the dropdown
-  const { data: supervisors = [] } = useQuery({
+  // Fetch all supervisors (we'll filter them based on organization)
+  const { data: allSupervisors = [] } = useQuery({
     queryKey: ["supervisors"],
     queryFn: async () => {
       const token = localStorage.getItem("token");
@@ -27,8 +27,15 @@ const CreateResourceModal = ({ onClose }) => {
       return data;
     },
   });
+  const organizations = allSupervisors.reduce((acc, supervisor) => {
+    const org = supervisor.organization?.name || supervisor.organization;
+    if (org && !acc.includes(org)) {
+      acc.push(org);
+    }
+    return acc;
+  }, []);
 
-  // Fetch sections for the dropdown (if available)
+  // Fetch sections
   const { data: sections = [] } = useQuery({
     queryKey: ["sections"],
     queryFn: async () => {
@@ -40,50 +47,60 @@ const CreateResourceModal = ({ onClose }) => {
     },
   });
 
-  // Add resource mutation
+  // Filter supervisors based on selected organization
+  const filteredSupervisors = allSupervisors.filter(
+    (supervisor) => supervisor.organization === formData.organization
+  );
+
+  const supervisorOptions = filteredSupervisors.map((supervisor) => ({
+    value: supervisor._id,
+    label: `${supervisor.name} (${supervisor.organization})`,
+  }));
+
+  const sectionOptions = sections.map((section) => ({
+    value: section,
+    label: section,
+  }));
+
   const addResourceMutation = useMutation({
     mutationFn: async (newResource) => {
       const token = localStorage.getItem("token");
       const { data } = await axios.post("http://localhost:5000/api/resources", newResource, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      return data; // Return the response data
+      return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["resources"] }); // Refresh the list
-      toast.success(data.message || "Resource created successfully"); // Use backend message
-      onClose(); // Close the modal
+      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      toast.success(data.message || "Resource created successfully");
+      onClose();
     },
     onError: (error) => {
-      toast.error(error.response?.data?.message || "Failed to add resource"); // Use backend error message
+      toast.error(error.response?.data?.message || "Failed to add resource");
     },
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Validate the number of supervisors before submitting
     if (formData.supervisors.length < 1 || formData.supervisors.length > 2) {
       toast.error("Please select 1 or 2 supervisors.");
       return;
     }
 
-    // Validate the section field
     if (!formData.section && !formData.newSection) {
       toast.error("Please select or create a section.");
       return;
     }
 
-    // Validate SLA time
     if (formData.slaTime <= 0 || formData.slaTime > 10080) {
       toast.error("SLA time must be between 1 and 10080 minutes.");
       return;
     }
 
-    // Prepare the final resource data
     const resourceData = {
       ...formData,
-      section: formData.newSection || formData.section, // Use new section if provided
+      section: formData.newSection || formData.section,
     };
 
     addResourceMutation.mutate(resourceData);
@@ -93,48 +110,26 @@ const CreateResourceModal = ({ onClose }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Handle supervisor selection
+  const handleOrganizationChange = (e) => {
+    const org = e.target.value;
+    setFormData({
+      ...formData,
+      organization: org,
+      supervisors: [], // Clear supervisors when organization changes
+    });
+  };
+
   const handleSupervisorChange = (selectedOptions) => {
-    // Restrict the selection to a maximum of 2 supervisors
     if (selectedOptions.length > 2) {
       toast.error("You can only select up to 2 supervisors.");
       return;
     }
-
-    const selectedSupervisors = selectedOptions.map((option) => option.value);
-
-    // Automatically set the organization based on the first selected supervisor
-    if (selectedSupervisors.length > 0) {
-      const firstSupervisor = supervisors.find(
-        (supervisor) => supervisor._id === selectedSupervisors[0]
-      );
-      setFormData({
-        ...formData,
-        supervisors: selectedSupervisors,
-        organization: firstSupervisor?.organization || "", // Set organization
-      });
-    } else {
-      setFormData({
-        ...formData,
-        supervisors: [],
-        organization: "", // Clear organization if no supervisors are selected
-      });
-    }
+    setFormData({
+      ...formData,
+      supervisors: selectedOptions.map((option) => option.value),
+    });
   };
 
-  // Format supervisors for the dropdown
-  const supervisorOptions = supervisors.map((supervisor) => ({
-    value: supervisor._id,
-    label: supervisor.name,
-  }));
-
-  // Format sections for the dropdown
-  const sectionOptions = sections.map((section) => ({
-    value: section,
-    label: section,
-  }));
-
-  // Close modal when clicking outside
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
       onClose();
@@ -142,35 +137,16 @@ const CreateResourceModal = ({ onClose }) => {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center"
-      onClick={handleBackdropClick} // Close modal on outside click
-    >
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center" onClick={handleBackdropClick}>
       <div className="bg-white p-6 rounded-lg shadow-lg w-[80%] max-w-4xl relative">
-        {/* Close Icon */}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
+        <button onClick={onClose} className="absolute top-2 right-2 text-gray-500 hover:text-gray-700">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
         <h2 className="text-xl font-bold mb-4">Add Resource</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name and Description in a grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Name</label>
@@ -191,23 +167,25 @@ const CreateResourceModal = ({ onClose }) => {
                 onChange={handleChange}
                 className="w-full p-2 border rounded-md"
                 required
-                rows={3} // Limit the height of the textarea
+                rows={3}
               />
             </div>
           </div>
 
-          {/* Organization and Section in a grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Organization</label>
-              <input
-                type="text"
+              <select
                 name="organization"
                 value={formData.organization}
-                onChange={handleChange}
-                className="w-full p-2 border rounded-md bg-gray-100"
-                readOnly // Make the field read-only
-              />
+                onChange={handleOrganizationChange}
+                className="w-full p-2 border rounded-md"
+                required
+              >
+                <option value="">Select an organization</option>
+                <option value="CSC">CSC</option>
+          <option value="GHP">GHP</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Section</label>
@@ -236,7 +214,6 @@ const CreateResourceModal = ({ onClose }) => {
             </div>
           </div>
 
-          {/* SLA Time and Supervisors in a grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">SLA Time (in minutes)</label>
@@ -258,15 +235,21 @@ const CreateResourceModal = ({ onClose }) => {
                 options={supervisorOptions}
                 onChange={handleSupervisorChange}
                 className="w-full"
-                placeholder="Select supervisors..."
+                placeholder={formData.organization ? "Select supervisors..." : "First select an organization"}
                 value={supervisorOptions.filter((option) =>
                   formData.supervisors.includes(option.value)
                 )}
+                isDisabled={!formData.organization}
+                noOptionsMessage={() => formData.organization ? "No supervisors found" : "Select an organization first"}
               />
+              {formData.organization && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Showing supervisors from: {formData.organization}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Buttons */}
           <div className="flex justify-end gap-2">
             <button
               type="button"

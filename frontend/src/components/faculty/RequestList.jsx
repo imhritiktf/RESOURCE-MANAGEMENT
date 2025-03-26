@@ -1,31 +1,29 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import useFacultyRequests from "../../hooks/useFacultyRequests";
 import { deleteRequest, resubmitRequest } from "../../api/facultyApi";
+import { useAuth } from "../../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
-// Function to calculate time ago (days, hours, or minutes)
+// Memoized utility functions outside component
 const getTimeAgo = (date) => {
   if (!date) return "N/A";
   const now = new Date();
   const createdDate = new Date(date);
   const diffInMs = now - createdDate;
 
-  const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24)); // Convert ms to days
-  const hours = Math.floor(diffInMs / (1000 * 60 * 60)); // Convert ms to hours
-  const minutes = Math.floor(diffInMs / (1000 * 60)); // Convert ms to minutes
+  const days = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const minutes = Math.floor(diffInMs / (1000 * 60));
 
-  if (days >= 1) {
-    return `${days} day${days !== 1 ? "s" : ""} ago`;
-  } else if (hours >= 1) {
-    return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
-  } else if (minutes >= 0) {
-    return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
-  }
+  if (days >= 1) return `${days} day${days !== 1 ? "s" : ""} ago`;
+  if (hours >= 1) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  if (minutes >= 0) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
   return "N/A";
 };
 
-// Function to format SLA response time (in minutes) to hours
 const getResponseTime = (slaTime) => {
   if (!slaTime || isNaN(slaTime)) return "N/A";
   const hours = Math.floor(slaTime / 60);
@@ -33,6 +31,11 @@ const getResponseTime = (slaTime) => {
 };
 
 const RequestList = () => {
+  // All hooks at the top - unconditional
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  
   const [filters, setFilters] = useState({
     status: "",
     priority: "",
@@ -42,52 +45,59 @@ const RequestList = () => {
     page: 1,
     limit: 10,
   });
+  
   const [selectedRequest, setSelectedRequest] = useState(null);
-
-  const queryClient = useQueryClient();
   const { data, isLoading, error, refetch } = useFacultyRequests(filters);
-  const requests = data?.requests || [];
-  const totalPages = data?.totalPages || 1;
-  const currentPage = data?.currentPage || 1;
-  const totalCount = data?.totalCount || requests.length;
 
-  // Delete Mutation
+  // Mutations
   const deleteMutation = useMutation({
     mutationFn: deleteRequest,
     onSuccess: (data) => {
       toast.success(data.message || "Request deleted successfully!");
-      queryClient.invalidateQueries(["facultyRequests"]);
+      queryClient.invalidateQueries(["facultyRequests", user?.id]); 
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || "Failed to delete request");
     },
   });
 
-  // Resubmit Mutation
   const resubmitMutation = useMutation({
     mutationFn: resubmitRequest,
     onSuccess: (data) => {
       toast.success(data.message || "Request resubmitted successfully!");
-      queryClient.invalidateQueries(["facultyRequests"]);
+      queryClient.invalidateQueries(["facultyRequests", user?.id]); 
     },
     onError: (error) => {
-      toast.error(
-        error.response?.data?.message || "Failed to resubmit request"
-      );
+      toast.error(error.response?.data?.message || "Failed to resubmit request");
     },
   });
 
+  // Effects
+  useEffect(() => {
+    console.log("Current user:", user);
+    console.log("Requests data:", data);
+  }, [user, data]);
+
+  useEffect(() => {
+    if (user?.id) {  // Changed from _id to id to match your user object
+      refetch();
+    }
+  }, [user?.id, refetch]);
+
+  // Derived data
+  const requests = data?.requests || [];
+  const totalPages = data?.totalPages || 1;
+  const currentPage = data?.currentPage || 1;
+  const totalCount = data?.totalCount || requests.length;
+
+  // Early returns
   if (isLoading) {
-    return (
-      <p className="text-center text-gray-600 py-8">Loading requests...</p>
-    );
-  }
-  if (error) {
-    return (
-      <p className="text-center text-red-500 py-8">Error: {error.message}</p>
-    );
+    return <p className="text-center text-gray-600 py-8">Loading requests...</p>;
   }
 
+  if (error) {
+    return <p className="text-center text-red-500 py-8">Error: {error.message}</p>;
+  }
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
@@ -213,11 +223,11 @@ const RequestList = () => {
             <tr>
               <th className="p-4 font-semibold">Resource</th>
               <th className="p-4 font-semibold">Organization</th>
-              <th className="p-4 font-semibold text-center">Requested Date</th>
-              <th className="p-4 font-semibold text-center">Pending Since</th>
+              <th className="p-4 font-semibold text-center">Event Date</th>
+              <th className="p-4 font-semibold text-center">Requested At</th>
               <th className="p-4 font-semibold text-center">Priority</th>
               <th className="p-4 font-semibold text-center">Status</th>
-              <th className="p-4 font-semibold text-center">Response Time</th>
+              <th className="p-4 font-semibold text-center">SLA Time</th>
               <th className="p-4 font-semibold text-center">Actions</th>
             </tr>
           </thead>
@@ -247,7 +257,7 @@ const RequestList = () => {
                     {request.resource ? request.resource.name : "No resource"}
                   </td>
                   <td className="p-4 text-gray-700">
-                    {request.organization || "N/A"}
+                    {request.resource ? request.resource.organization : "N/A"}
                   </td>
                   <td className="p-4 text-gray-700 text-center">
                     {new Date(request.requestedDate).toLocaleDateString()}
@@ -396,14 +406,14 @@ const RequestList = () => {
               </p>
               <p>
                 <strong>Organization:</strong>{" "}
-                {selectedRequest.organization || "N/A"}
+                {selectedRequest.resource?.organization || "N/A"}
               </p>
               <p>
-                <strong>Requested Date:</strong>{" "}
+                <strong>Event Date:</strong>{" "}
                 {new Date(selectedRequest.requestedDate).toLocaleDateString()}
               </p>
               <p>
-                <strong>Pending Since:</strong>{" "}
+                <strong>Requested At:</strong>{" "}
                 {getTimeAgo(selectedRequest.createdAt)}
               </p>
               <p>
@@ -453,8 +463,6 @@ const RequestList = () => {
                 {selectedRequest.eventDetails || "N/A"}
               </div>
             </div>
-
-           
 
             <div className="flex justify-end mt-6">
               <button
